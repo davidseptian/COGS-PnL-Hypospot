@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hypospot Dashboard Keuangan</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--g:#d4af37;--g2:#8a6d1b;--bg:#000;--card:#141414;--ln:#2a2410;--tx:#f3efe2;--mu:#9b947d;--rd:#e5675a;--gr:#6fcf97}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:400 14px/1.5 'Plus Jakarta Sans',system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--g2)}
+h1{margin:0;font-size:20px;font-weight:800;color:var(--g)}h2{font-size:16px;margin:0 0 10px;color:var(--g)}
+nav{display:flex;gap:6px;flex-wrap:wrap}nav button,.btn{background:none;border:1px solid var(--g2);color:var(--g);padding:8px 14px;border-radius:6px;font:600 13px inherit;font-family:inherit;cursor:pointer}
+nav button.on,.btn.p{background:var(--g);color:#000}
+main{padding:24px;max-width:1100px;margin:auto}section{display:none}section.on{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px}
+.k{background:var(--card);border:1px solid var(--ln);border-radius:8px;padding:14px}.k small{color:var(--mu)}.k b{display:block;font-size:19px;margin-top:2px}
+.k.big{border-color:var(--g)}.k.big b{font-size:24px;color:var(--g)}.neg{color:var(--rd)!important}
+.box{background:var(--card);border:1px solid var(--ln);border-radius:8px;padding:16px;margin-bottom:16px}
+input,select,textarea{background:#000;color:var(--tx);border:1px solid var(--g2);border-radius:6px;padding:8px 10px;font:inherit;width:100%}
+label{display:block;color:var(--mu);font-size:12px;margin:8px 0 3px}.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid var(--ln);text-align:right}th:first-child,td:first-child{text-align:left}th{color:var(--g);font-weight:600}
+.wrap{overflow-x:auto}.msg{color:var(--mu);font-size:12px;margin-top:8px}a{color:var(--g)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--g);outline-offset:2px}
+</style></head><body>
+<header><h1>Hypospot Shoes Care · Dashboard Keuangan</h1>
+<nav id="nav"><button data-t="d" class="on">Dashboard</button><button data-t="i">Input Bulanan</button><button data-t="h">HPP</button><button data-t="p">Penjualan SKU</button><button data-t="s">Data &amp; Spreadsheet</button></nav></header>
+<main>
+<section id="d" class="on">
+ <div style="max-width:260px;margin-bottom:14px"><label>Periode</label><select id="per"></select></div>
+ <div class="grid" id="kpi"></div>
+ <div class="box"><h2>Tren bulanan</h2><canvas id="ch" height="110"></canvas></div>
+ <div class="box"><h2>Rekap bulanan</h2><div class="wrap"><table id="tb"></table></div></div>
+</section>
+
+<section id="i">
+ <div class="box"><h2>Input satu bulan</h2>
+  <div class="row"><div><label>Bulan</label><input type="month" id="bln"></div><div><label>Revenue riil (Rp)</label><input id="rev" inputmode="numeric"></div>
+  <div><label>Operating cost (Rp)</label><input id="opx" inputmode="numeric"></div><div><label>Marketing cost (Rp)</label><input id="mkt" inputmode="numeric"></div>
+  <div><label>Produk close (pcs)</label><input id="prd" inputmode="numeric"></div><div><label>Resi close</label><input id="rsi" inputmode="numeric"></div></div>
+  <p class="msg" id="cg">COGS bulan ini dihitung otomatis dari upload Penjualan SKU × HPP.</p>
+  <button class="btn p" id="sv">Simpan bulan ini</button></div>
+ <div class="box"><h2>Upload revenue, operating &amp; marketing (banyak bulan)</h2>
+  <p class="msg">Excel/CSV dengan kolom: <b>bulan</b> (contoh 2026-10), <b>revenue</b>, <b>operating</b>, <b>marketing</b>. Kolom opsional: <b>produk close</b>, <b>resi close</b>.</p>
+  <input type="file" id="fu" accept=".xlsx,.xls,.csv"><p class="msg" id="mu"></p>
+  <button class="btn" id="tpl">Unduh template</button></div>
+</section>
+
+<section id="h"><div class="box"><h2>Master HPP per SKU</h2>
+ <p class="msg">Upload Excel/CSV dengan kolom <b>sku</b> dan <b>hpp</b>. Upload ulang akan memperbarui HPP SKU yang sama.</p>
+ <input type="file" id="fh" accept=".xlsx,.xls,.csv"><p class="msg" id="mh"></p>
+ <div style="max-width:300px"><label>Cari SKU</label><input id="qh"></div>
+ <div class="wrap" style="max-height:380px;overflow:auto"><table id="th"></table></div></div></section>
+
+<section id="p"><div class="box"><h2>Penjualan by SKU (tarikan ERP yang sudah close)</h2>
+ <div style="max-width:220px"><label>Bulan</label><input type="month" id="bp"></div>
+ <p class="msg">Kolom: <b>sku</b>, <b>qty</b>. Jika ada kolom <b>resi</b>/<b>no resi</b>, jumlah resi unik ikut terhitung otomatis. Upload ulang pada bulan yang sama menimpa data sebelumnya.</p>
+ <input type="file" id="fp" accept=".xlsx,.xls,.csv"><p class="msg" id="mp"></p></div></section>
+
+<section id="s"><div class="box"><h2>Simpan ke spreadsheet</h2>
+ <p class="msg">Data tersimpan di browser dan otomatis dikirim ke Google Sheets jika URL Apps Script diisi (lihat Code.gs).</p>
+ <label>URL Web App Google Apps Script</label><input id="url" placeholder="https://script.google.com/macros/s/.../exec">
+ <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" id="us">Simpan URL</button><button class="btn" id="sy">Kirim semua bulan ke Sheets</button>
+ <button class="btn" id="xl">Unduh Excel</button><button class="btn" id="bk">Backup JSON</button><label class="btn" style="margin:0">Restore JSON<input type="file" id="rs" accept=".json" hidden></label></p><p class="msg" id="ms"></p></div></section>
+</main>
+<script>
+const K='hypo_v1',$=i=>document.getElementById(i);
+let S=JSON.parse(localStorage.getItem(K)||'{"hpp":{},"m":{},"url":""}'),CH;
+const save=()=>localStorage.setItem(K,JSON.stringify(S));
+const rp=n=>'Rp '+Math.round(n||0).toLocaleString('id-ID');
+const nt=m=>m.rev-m.cogs-m.opx-m.mkt;
+function num(v){if(typeof v==='number')return v;let s=String(v||'').replace(/[^\d,.-]/g,'');if(/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(',','.');return parseFloat(s)||0}
+function ym(v){if(v instanceof Date){const d=new Date(v.getTime()+432e5);return d.toISOString().slice(0,7)}const s=String(v).trim();if(/^\d{4}-\d{1,2}/.test(s)){const[a,b]=s.split('-');return a+'-'+b.slice(0,2).padStart(2,'0')}const d=new Date(s);return isNaN(d)?'':d.toISOString().slice(0,7)}
+function rd(f,cb){const r=new FileReader();r.onload=e=>{const w=XLSX.read(e.target.result,{type:'array',cellDates:true});cb(XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]],{defval:''}))};r.readAsArrayBuffer(f)}
+function col(r,ks){for(const k in r){const l=k.toLowerCase();if(ks.some(x=>l.includes(x)))return r[k]}return ''}
+function gm(k){return S.m[k]||(S.m[k]={rev:0,opx:0,mkt:0,cogs:0,prd:0,rsi:0,unm:[]})}
+function recalc(k){const m=gm(k);if(!m.sales)return;let c=0,u=[];for(const s in m.sales){const h=S.hpp[s];if(h===undefined)u.push(s);else c+=m.sales[s]*h}m.cogs=c;m.unm=u}
+// nav
+$('nav').onclick=e=>{const t=e.target.dataset.t;if(!t)return;document.querySelectorAll('nav button,section').forEach(x=>x.classList.remove('on'));e.target.classList.add('on');$(t).classList.add('on');render()};
+// input manual
+$('bln').value=$('bp').value=new Date().toISOString().slice(0,7);
+function fill(){const m=S.m[$('bln').value];['rev','opx','mkt','prd','rsi'].forEach(f=>$(f).value=m&&m[f]?m[f]:'');$('cg').textContent='COGS bulan ini: '+rp(m?m.cogs:0)+' (otomatis dari Penjualan SKU × HPP).'}
+$('bln').onchange=fill;
+$('sv').onclick=()=>{const k=$('bln').value;if(!k)return;const m=gm(k);m.rev=num($('rev').value);m.opx=num($('opx').value);m.mkt=num($('mkt').value);m.prd=num($('prd').value);m.rsi=num($('rsi').value);save();push([k]);$('cg').textContent='Tersimpan.';render()};
+$('fu').onchange=e=>rd(e.target.files[0],rows=>{let n=0;rows.forEach(r=>{const k=ym(col(r,['bulan','periode','month']));if(!k)return;const m=gm(k);m.rev=num(col(r,['revenue','omzet','omset']));m.opx=num(col(r,['operat','opex']));m.mkt=num(col(r,['market','iklan']));const p=col(r,['produk']),s=col(r,['resi']);if(p!=='')m.prd=num(p);if(s!=='')m.rsi=num(s);n++});save();push(Object.keys(S.m));$('mu').textContent=n+' bulan berhasil diimpor.';render()});
+$('tpl').onclick=()=>{const w=XLSX.utils.book_new();XLSX.utils.book_append_sheet(w,XLSX.utils.aoa_to_sheet([['bulan','revenue','operating','marketing','produk close','resi close'],['2026-10',0,0,0,0,0]]),'Template');XLSX.writeFile(w,'template-input-bulanan.xlsx')};
+// HPP
+$('fh').onchange=e=>rd(e.target.files[0],rows=>{let n=0;rows.forEach(r=>{const s=String(col(r,['sku','kode'])).trim();if(!s)return;S.hpp[s]=num(col(r,['hpp','cogs','modal']));n++});Object.keys(S.m).forEach(recalc);save();$('mh').textContent=n+' SKU diperbarui; COGS semua bulan dihitung ulang.';render()});
+$('qh').oninput=render;
+// penjualan
+$('fp').onchange=e=>rd(e.target.files[0],rows=>{const k=$('bp').value;if(!k)return;const m=gm(k),sa={},rs=new Set();let q=0;rows.forEach(r=>{const s=String(col(r,['sku','kode'])).trim();if(!s)return;const n=num(col(r,['qty','jumlah','terjual','quantity']));sa[s]=(sa[s]||0)+n;q+=n;const x=String(col(r,['resi'])).trim();if(x)rs.add(x)});m.sales=sa;m.prd=q;if(rs.size)m.rsi=rs.size;recalc(k);save();push([k]);$('mp').innerHTML='Bulan '+k+': '+Object.keys(sa).length+' SKU, '+q.toLocaleString('id-ID')+' pcs, COGS '+rp(m.cogs)+(rs.size?', '+rs.size+' resi':'')+(m.unm.length?'<br><span class="neg">'+m.unm.length+' SKU belum punya HPP: '+m.unm.slice(0,15).join(', ')+(m.unm.length>15?'…':'')+'</span>':'');render()});
+// sheets
+function row(k){const m=gm(k);return{bulan:k,revenue:m.rev,cogs:m.cogs,operating:m.opx,marketing:m.mkt,net_profit:nt(m),produk_close:m.prd,resi_close:m.rsi}}
+function push(ks){if(!S.url)return;fetch(S.url,{method:'POST',mode:'no-cors',body:JSON.stringify({rows:ks.map(row)})}).then(()=>$('ms').textContent='Terkirim ke Google Sheets.').catch(()=>$('ms').textContent='Gagal mengirim ke Sheets.')}
+$('url').value=S.url||'';$('us').onclick=()=>{S.url=$('url').value.trim();save();$('ms').textContent='URL disimpan.'};
+$('sy').onclick=()=>push(Object.keys(S.m));
+$('xl').onclick=()=>{const w=XLSX.utils.book_new();XLSX.utils.book_append_sheet(w,XLSX.utils.json_to_sheet(Object.keys(S.m).sort().map(row)),'Bulanan');XLSX.utils.book_append_sheet(w,XLSX.utils.json_to_sheet(Object.entries(S.hpp).map(([sku,hpp])=>({sku,hpp}))),'HPP');XLSX.writeFile(w,'hypospot-keuangan.xlsx')};
+$('bk').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download='hypospot-backup.json';a.click()};
+$('rs').onchange=e=>{const r=new FileReader();r.onload=x=>{try{S=JSON.parse(x.target.result);save();render();$('ms').textContent='Backup dipulihkan.'}catch{$('ms').textContent='File tidak valid.'}};r.readAsText(e.target.files[0])};
+// render
+function render(){
+ const ks=Object.keys(S.m).sort(),cur=$('per').value||'all';
+ $('per').innerHTML='<option value="all">Total semua bulan</option>'+ks.map(k=>`<option ${k===cur?'selected':''}>${k}</option>`).join('');
+ const sel=cur==='all'?ks:[cur],T={rev:0,cogs:0,opx:0,mkt:0,prd:0,rsi:0};
+ sel.forEach(k=>{const m=S.m[k];for(const f in T)T[f]+=m[f]||0});
+ const n=nt(T),mg=T.rev?n/T.rev*100:0,card=(l,v,c)=>`<div class="k ${c||''}"><small>${l}</small><b class="${v<0?'neg':''}">${typeof v==='number'?rp(v):v}</b></div>`;
+ $('kpi').innerHTML=card('Net profit riil',n,'big')+card('Margin bersih',mg.toFixed(1)+'%')+card('Revenue',T.rev)+card('COGS (HPP × SKU)',T.cogs)+card('Operating cost',T.opx)+card('Marketing cost',T.mkt)+card('Produk close',T.prd.toLocaleString('id-ID')+' pcs')+card('Resi close',T.rsi.toLocaleString('id-ID'));
+ $('tb').innerHTML='<tr><th>Bulan</th><th>Revenue</th><th>COGS</th><th>Operating</th><th>Marketing</th><th>Net profit</th><th>Produk</th><th>Resi</th></tr>'+(ks.map(k=>{const m=S.m[k];return`<tr><td>${k}</td><td>${rp(m.rev)}</td><td>${rp(m.cogs)}</td><td>${rp(m.opx)}</td><td>${rp(m.mkt)}</td><td class="${nt(m)<0?'neg':''}">${rp(nt(m))}</td><td>${m.prd||0}</td><td>${m.rsi||0}</td></tr>`}).join('')||'<tr><td colspan="8">Belum ada data. Mulai dari menu Input Bulanan.</td></tr>');
+ if(CH)CH.destroy();
+ CH=new Chart($('ch'),{type:'bar',data:{labels:ks,datasets:[{label:'Revenue',data:ks.map(k=>S.m[k].rev),backgroundColor:'#8a6d1b'},{label:'Net profit',data:ks.map(k=>nt(S.m[k])),backgroundColor:'#d4af37'}]},options:{plugins:{legend:{labels:{color:'#f3efe2'}}},scales:{x:{ticks:{color:'#9b947d'},grid:{color:'#2a2410'}},y:{ticks:{color:'#9b947d',callback:v=>(v/1e6)+' jt'},grid:{color:'#2a2410'}}}}});
+ const q=($('qh').value||'').toLowerCase(),hs=Object.entries(S.hpp).filter(([s])=>s.toLowerCase().includes(q));
+ $('th').innerHTML='<tr><th>SKU</th><th>HPP</th></tr>'+hs.slice(0,500).map(([s,h])=>`<tr><td>${s}</td><td>${rp(h)}</td></tr>`).join('');
+ fill()}
+$('per').onchange=render;render();
+</script></body></html>
