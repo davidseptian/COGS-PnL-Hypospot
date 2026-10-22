@@ -38,7 +38,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   <div><label>Operating cost (Rp)</label><input id="opx" inputmode="numeric"></div><div><label>Marketing cost (Rp)</label><input id="mkt" inputmode="numeric"></div>
   <div><label>Produk close (pcs)</label><input id="prd" inputmode="numeric"></div><div><label>Resi close</label><input id="rsi" inputmode="numeric"></div></div>
   <p class="msg" id="cg">COGS bulan ini dihitung otomatis dari upload Penjualan SKU × HPP.</p>
-  <button class="btn p" id="sv">Simpan bulan ini</button></div>
+  <button class="btn p" id="sv">Simpan bulan ini</button><button class="btn" id="dmo" style="margin-left:8px">Hapus data bulan ini</button></div>
  <div class="box"><h2>Upload revenue, operating &amp; marketing (banyak bulan)</h2>
   <p class="msg">Excel/CSV dengan kolom: <b>bulan</b> (contoh 2026-10), <b>revenue</b>, <b>operating</b>, <b>marketing</b>. Kolom opsional: <b>produk close</b>, <b>resi close</b>.</p>
   <input type="file" id="fu" accept=".xlsx,.xls,.csv"><p class="msg" id="mu"></p>
@@ -59,7 +59,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 <section id="p"><div class="box"><h2>Penjualan by SKU (tarikan ERP yang sudah close)</h2>
  <div style="max-width:220px"><label>Bulan</label><select id="bp"></select></div>
  <p class="msg">Kolom: <b>Nama Produk</b> (atau <b>sku</b>), <b>Qty</b>, <b>Sub Total</b>. Jika ada kolom <b>resi</b>/<b>no resi</b>, jumlah resi unik ikut terhitung otomatis. Upload ulang pada bulan yang sama menimpa data sebelumnya.</p>
- <input type="file" id="fp" accept=".xlsx,.xls,.csv" hidden><label class="btn p" for="fp" style="display:inline-block">Upload pesanan (Excel / CSV)</label><p class="msg" id="mp"></p></div>
+ <input type="file" id="fp" accept=".xlsx,.xls,.csv" hidden><label class="btn p" for="fp" style="display:inline-block">Upload pesanan (Excel / CSV)</label><button class="btn" id="dsl" style="margin-left:8px">Hapus penjualan bulan ini</button><p class="msg" id="mp"></p></div>
 <div class="box"><h2>Hasil hitung COGS bulan terpilih</h2><div class="wrap" style="max-height:360px;overflow:auto"><table id="ts"></table></div></div></section>
 
 <section id="s"><div class="box"><h2>Simpan ke spreadsheet</h2>
@@ -130,9 +130,9 @@ $('bp').onchange=()=>{$('mp').textContent='';renderSales()};
 // sheets
 function row(k){const m=gm(k);return{bulan:k,revenue:m.rev,cogs:m.cogs,operating:m.opx,marketing:m.mkt,net_profit:nt(m),produk_close:m.prd,resi_close:m.rsi}}
 const fmtT=t=>t?new Date(t).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
-async function push(ks){if(!S.url){S.ss={st:'off'};renderBd();return}
+async function push(ks,del){if(!S.url){S.ss={st:'off'};renderBd();return}
  S.ss={st:'wait'};renderBd();
- try{const r=await fetch(S.url,{method:'POST',body:JSON.stringify({rows:ks.map(row)})}),j=await r.json();if(!j.ok)throw 0;const t=Date.now();ks.forEach(k=>gm(k).sy=t);S.ss={st:'ok',at:t}}catch(e){S.ss={st:'err'}}
+ try{const r=await fetch(S.url,{method:'POST',body:JSON.stringify({rows:ks.map(row),del:del||[]})}),j=await r.json();if(!j.ok)throw 0;const t=Date.now();ks.forEach(k=>gm(k).sy=t);S.ss={st:'ok',at:t}}catch(e){S.ss={st:'err'}}
  save();render()}
 function renderBd(){const hk=S.he?'<span class="k neg" style="padding:4px 10px">✗ Gagal sinkron HPP, memakai HPP terakhir</span>':S.hppAt&&Object.keys(S.hpp).length?`<span class="k" style="padding:4px 10px">✓ HPP tersinkron ${S.hppAt} (${Object.keys(S.hpp).length} SKU)</span>`:'<span class="k neg" style="padding:4px 10px">✗ HPP belum disinkron</span>';
  const z=S.url&&(!S.ss||S.ss.st==='off')?{st:'idle'}:(S.ss||{st:'off'}),t={ok:'✓ Spreadsheet tersinkron '+fmtT(z.at),wait:'… Mengirim ke spreadsheet',err:'✗ Gagal terhubung ke spreadsheet (data aman di browser). Cek URL /exec, akses Anyone, dan Code.gs terbaru sudah di-deploy',off:'✗ Spreadsheet belum terhubung',idle:'Spreadsheet terhubung, belum ada kiriman'}[z.st];
@@ -157,5 +157,7 @@ function render(){
  const q=($('qh').value||'').toLowerCase(),hs=Object.entries(S.hpp).filter(([s])=>s.toLowerCase().includes(q));
  $('th').innerHTML='<tr><th>SKU</th><th>HPP</th></tr>'+hs.slice(0,500).map(([s,h])=>`<tr><td>${s}</td><td>${rp(h)}</td></tr>`).join('');
  renderBd();renderSales();renderMap()}
+$('dsl').onclick=()=>{const k=$('bp').value,m=S.m[k];if(!m||!m.sales){$('mp').textContent='Belum ada data penjualan untuk bulan ini.';return}if(!confirm('Hapus data penjualan '+BL[+k.slice(5)-1]+' '+k.slice(0,4)+'? Revenue dan biaya bulan ini tidak ikut terhapus.'))return;delete m.sales;delete m.sub;delete m.erp;m.cogs=0;m.unm=[];m.prd=0;m.sy=0;save();push([k]);$('mp').textContent='✓ Data penjualan bulan ini dihapus.';render();fill()};
+$('dmo').onclick=()=>{const k=$('bln').value,m=S.m[k];if(!m){$('cg').textContent='Belum ada data untuk bulan ini.';return}if(!confirm('Hapus SEMUA data '+BL[+k.slice(5)-1]+' '+k.slice(0,4)+' (revenue, biaya, penjualan) dari dashboard dan spreadsheet?'))return;delete S.m[k];save();push([],[k]);render();fill();$('cg').textContent='✓ Data bulan ini dihapus.'};
 $('per').onchange=render;render();fill();$('hsy').click();if(S.url)$('us').click();
 </script></body></html>
