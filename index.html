@@ -46,7 +46,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 </section>
 
 <section id="h"><div class="box"><h2>Sinkron dari Google Sheets</h2>
- <p class="msg">Terhubung ke spreadsheet HPP Sistem Otomatis (tab REKAP SKU) dan otomatis sinkron setiap dashboard dibuka. Sheet harus dibagikan sebagai Viewer untuk siapa pun yang punya link, atau pakai URL Apps Script + token.</p>
+ <p class="msg">Terhubung ke spreadsheet HPP Sistem Otomatis (tab REKAP SKU) dan otomatis sinkron setiap dashboard dibuka. Jika Apps Script sudah terhubung, HPP diambil lewat Apps Script lebih dulu (angka lebih akurat), lalu cadangan lewat link sheet (harus dibagikan sebagai Viewer).</p>
  <label>Link Google Sheets atau URL Apps Script</label><input id="hsrc" placeholder="https://docs.google.com/spreadsheets/d/..."><label>Nama tab</label><input id="htab">
  <p><button class="btn p" id="hsy">Sinkron HPP sekarang</button></p><p class="msg" id="hsm"></p></div>
 <div class="box"><h2>Master HPP per SKU</h2>
@@ -64,7 +64,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 <section id="s"><div class="box"><h2>Simpan ke spreadsheet</h2>
  <p class="msg">Data tersimpan di browser dan otomatis dikirim ke Google Sheets jika URL Apps Script diisi (lihat Code.gs).</p>
  <label>URL Web App Google Apps Script</label><input id="url" placeholder="https://script.google.com/macros/s/.../exec">
- <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" id="us">Simpan URL</button><button class="btn" id="sy">Kirim semua bulan ke Sheets</button>
+ <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" id="us">Simpan URL</button><button class="btn" id="rc">Sambungkan ulang</button><button class="btn" id="sy">Kirim semua bulan (ganti data lama)</button>
  <button class="btn" id="xl">Unduh Excel</button><button class="btn" id="bk">Backup JSON</button><label class="btn" style="margin:0">Restore JSON<input type="file" id="rs" accept=".json" hidden></label></p><p class="msg" id="ms"></p></div></section>
 </main>
 <script>
@@ -101,14 +101,18 @@ function hp(s){if(S.hpp[s]!==undefined)return S.hpp[s];if(/^HSCAT/.test(s)&&S.hp
 $('hsrc').value=S.hsrc||HPP_URL;$('htab').value=S.htab||'REKAP SKU';
 function setHpp(rows){let n=0,k=0,c=1,d=2,st=0;S.nm=S.nm||{};S.sn=S.sn||{};
  for(let i=0;i<rows.length&&i<15;i++){const l=rows[i].map(x=>String(x).trim().toLowerCase()),a=l.indexOf('sku'),b=l.findIndex(x=>x.startsWith('modal')||x==='hpp');if(a>=0&&b>=0){k=a;c=b;d=l.findIndex(x=>x.startsWith('nama'));st=i+1;break}}
- rows.slice(st).forEach(r=>{const s=String(r[k]||'').trim();if(/^HS/i.test(s)&&String(r[c]).trim()!==''){S.hpp[s]=num(r[c]);if(d>=0&&r[d]){S.nm[norm(r[d])]=s;S.sn[s]=String(r[d]).trim()}n++}});
+ rows.slice(st).forEach(r=>{let s=String(r[k]||'').trim(),cc=c,dd=d;if(!/^HS[A-Z]{2,5}\d+$/i.test(s)){const i=r.findIndex(x=>/^HS[A-Z]{2,5}\d+$/i.test(String(x).trim()));if(i<0)return;s=String(r[i]).trim();cc=i+3;dd=i+1}
+  if(String(r[cc]).trim()!==''){S.hpp[s]=num(r[cc]);if(r[dd]){S.nm[norm(r[dd])]=s;S.sn[s]=String(r[dd]).trim()}n++}});
  Object.keys(S.m).forEach(recalc);S.hppAt=new Date().toLocaleString('id-ID');save();return n}
+async function csvRows(u){const r=await fetch(u);if(!r.ok)throw 0;const w=XLSX.read(await r.text(),{type:'string'});return XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]],{header:1,defval:''})}
 $('hsy').onclick=async()=>{const v=$('hsrc').value.trim(),t=$('htab').value.trim()||'REKAP SKU';if(!v)return;S.hsrc=v;S.htab=t;save();$('hsm').textContent='Mengambil data...';
- try{let rows;
-  if(v.includes('script.google.com')){rows=(await(await fetch(v)).json()).rows}else if(v.includes('output=csv')){const w=XLSX.read(await(await fetch(v)).text(),{type:'string'});rows=XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]],{header:1,defval:''})}
-  else{const id=(v.match(/\/d\/([\w-]+)/)||[])[1]||v,r=await fetch('https://docs.google.com/spreadsheets/d/'+id+'/gviz/tq?tqx=out:csv&sheet='+encodeURIComponent(t));if(!r.ok)throw 0;const w=XLSX.read(await r.text(),{type:'string'});rows=XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]],{header:1,defval:''})}
-  const n=setHpp(rows);S.he=0;$('hsm').textContent=n+' SKU diperbarui ('+S.hppAt+'). COGS semua bulan dihitung ulang.';render()
- }catch(e){S.he=1;renderBd();$('hsm').textContent='Gagal mengambil data. Cek bahwa sheet dibagikan sebagai Viewer untuk siapa pun yang punya link dan nama tab benar.'}};
+ const tries=[];if(S.url)tries.push(['Apps Script',async()=>(await(await fetch(S.url+'?action=hpp')).json()).rows]);
+ if(v.includes('script.google.com'))tries.push(['Apps Script (link HPP)',async()=>(await(await fetch(v)).json()).rows]);
+ else if(v.includes('output=csv'))tries.push(['CSV publik',()=>csvRows(v)]);
+ else{const id=(v.match(/\/d\/([\w-]+)/)||[])[1]||v;tries.push(['Google Sheets',()=>csvRows('https://docs.google.com/spreadsheets/d/'+id+'/gviz/tq?tqx=out:csv&sheet='+encodeURIComponent(t))])}
+ const log=[];
+ for(const [nm,fn] of tries){try{const rows=await fn(),n=setHpp(rows);if(n){S.he=0;save();$('hsm').textContent='✓ '+n+' SKU diperbarui dari '+nm+' ('+S.hppAt+'). COGS semua bulan dihitung ulang.';render();return}log.push(nm+': terbaca '+rows.length+' baris, tidak ada SKU'+(rows[0]?' (baris 1: '+JSON.stringify(rows[0]).slice(0,100)+')':''))}catch(e){log.push(nm+': gagal diambil ('+((e&&e.message)||'diblokir browser atau tanpa izin')+')')}}
+ S.he=1;S.hppAt='';save();render();$('hsm').textContent='Gagal. '+log.join(' | ')};
 // penjualan
 $('fp').onchange=e=>{const f=e.target.files[0];if(!f)return;rd(f,rows=>{const k=$('bp').value,m=gm(k),sa={},sb={},rs=new Set();let q=0,tot=0;S.nm=S.nm||{};
  rows.forEach(r=>{let s=String(col(r,['sku','kode'])).trim();const nama=String(col(r,['nama produk','nama','produk','product'])).trim();if(!s&&nama)s=AL[norm(nama)]||S.nm[norm(nama)]||nama;if(!s)return;
@@ -125,10 +129,11 @@ async function push(ks){if(!S.url){S.ss={st:'off'};renderBd();return}
  S.ss={st:'wait'};renderBd();
  try{const r=await fetch(S.url,{method:'POST',body:JSON.stringify({rows:ks.map(row)})}),j=await r.json();if(!j.ok)throw 0;const t=Date.now();ks.forEach(k=>gm(k).sy=t);S.ss={st:'ok',at:t}}catch(e){S.ss={st:'err'}}
  save();render()}
-function renderBd(){const hk=S.he?'<span class="k neg" style="padding:4px 10px">✗ Gagal sinkron HPP, memakai HPP terakhir</span>':S.hppAt?`<span class="k" style="padding:4px 10px">✓ HPP tersinkron ${S.hppAt} (${Object.keys(S.hpp).length} SKU)</span>`:'<span class="k neg" style="padding:4px 10px">✗ HPP belum disinkron</span>';
- const z=S.ss||{st:S.url?'idle':'off'},t={ok:'✓ Spreadsheet tersinkron '+fmtT(z.at),wait:'… Mengirim ke spreadsheet',err:'✗ Gagal sinkron ke spreadsheet (data aman di browser)',off:'✗ Spreadsheet belum terhubung',idle:'Spreadsheet terhubung, belum ada kiriman'}[z.st];
+function renderBd(){const hk=S.he?'<span class="k neg" style="padding:4px 10px">✗ Gagal sinkron HPP, memakai HPP terakhir</span>':S.hppAt&&Object.keys(S.hpp).length?`<span class="k" style="padding:4px 10px">✓ HPP tersinkron ${S.hppAt} (${Object.keys(S.hpp).length} SKU)</span>`:'<span class="k neg" style="padding:4px 10px">✗ HPP belum disinkron</span>';
+ const z=S.url&&(!S.ss||S.ss.st==='off')?{st:'idle'}:(S.ss||{st:'off'}),t={ok:'✓ Spreadsheet tersinkron '+fmtT(z.at),wait:'… Mengirim ke spreadsheet',err:'✗ Gagal terhubung ke spreadsheet (data aman di browser). Cek URL /exec, akses Anyone, dan Code.gs terbaru sudah di-deploy',off:'✗ Spreadsheet belum terhubung',idle:'Spreadsheet terhubung, belum ada kiriman'}[z.st];
  $('bd').innerHTML=hk+`<span class="k ${z.st==='ok'||z.st==='idle'?'':'neg'}" style="padding:4px 10px">${t}</span>`;$('ms').textContent=t}
 $('url').value=S.url||'';$('us').onclick=async()=>{S.url=$('url').value.trim();save();if(!S.url){S.ss={st:'off'};renderBd();return}try{const j=await(await fetch(S.url+'?action=ping')).json();S.ss=j.ok?{st:'idle'}:{st:'err'}}catch(e){S.ss={st:'err'}}save();renderBd()};
+$('rc').onclick=()=>$('us').click();
 $('sy').onclick=()=>push(Object.keys(S.m));
 $('xl').onclick=()=>{const w=XLSX.utils.book_new();XLSX.utils.book_append_sheet(w,XLSX.utils.json_to_sheet(Object.keys(S.m).sort().map(row)),'Bulanan');XLSX.utils.book_append_sheet(w,XLSX.utils.json_to_sheet(Object.entries(S.hpp).map(([sku,hpp])=>({sku,hpp}))),'HPP');XLSX.writeFile(w,'hypospot-keuangan.xlsx')};
 $('bk').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download='hypospot-backup.json';a.click()};
@@ -143,9 +148,9 @@ function render(){
  $('kpi').innerHTML=card('Net profit riil',n,'big')+card('Margin bersih',mg.toFixed(1)+'%')+card('Revenue',T.rev)+card('COGS (HPP × SKU)',T.cogs)+card('Operating cost',T.opx)+card('Marketing cost',T.mkt)+card('Produk close',T.prd.toLocaleString('id-ID')+' pcs')+card('Resi close',T.rsi.toLocaleString('id-ID'));
  $('tb').innerHTML='<tr><th>Bulan</th><th>Revenue</th><th>COGS</th><th>Operating</th><th>Marketing</th><th>Net profit</th><th>Produk</th><th>Resi</th><th>Sheets</th></tr>'+(ks.map(k=>{const m=S.m[k];return`<tr><td>${k}</td><td>${rp(m.rev)}</td><td>${rp(m.cogs)}</td><td>${rp(m.opx)}</td><td>${rp(m.mkt)}</td><td class="${nt(m)<0?'neg':''}">${rp(nt(m))}</td><td>${m.prd||0}</td><td>${m.rsi||0}</td><td>${m.sy?"✓":"belum"}</td></tr>`}).join('')||'<tr><td colspan="9">Belum ada data. Mulai dari menu Input Bulanan.</td></tr>');
  if(CH)CH.destroy();
- CH=new Chart($('ch'),{type:'bar',data:{labels:ks,datasets:[{label:'Revenue',data:ks.map(k=>S.m[k].rev),backgroundColor:'#8a6d1b'},{label:'Net profit',data:ks.map(k=>nt(S.m[k])),backgroundColor:'#d4af37'}]},options:{plugins:{legend:{labels:{color:'#f3efe2'}}},scales:{x:{ticks:{color:'#9b947d'},grid:{color:'#2a2410'}},y:{ticks:{color:'#9b947d',callback:v=>(v/1e6)+' jt'},grid:{color:'#2a2410'}}}}});
+ CH=new Chart($('ch'),{type:'bar',data:{labels:ks,datasets:[{label:'Revenue',data:ks.map(k=>S.m[k].rev),backgroundColor:'#8a6d1b'},{label:'Net profit',data:ks.map(k=>nt(S.m[k])),backgroundColor:'#d4af37'}]},options:{plugins:{legend:{labels:{color:'#f3efe2'}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+rp(c.parsed.y)}}},scales:{x:{ticks:{color:'#9b947d'},grid:{color:'#2a2410'}},y:{beginAtZero:true,suggestedMax:1000000,ticks:{color:'#9b947d',callback:v=>rp(v)},grid:{color:'#2a2410'}}}}});
  const q=($('qh').value||'').toLowerCase(),hs=Object.entries(S.hpp).filter(([s])=>s.toLowerCase().includes(q));
  $('th').innerHTML='<tr><th>SKU</th><th>HPP</th></tr>'+hs.slice(0,500).map(([s,h])=>`<tr><td>${s}</td><td>${rp(h)}</td></tr>`).join('');
  renderBd();renderSales()}
-$('per').onchange=render;render();fill();$('hsy').click();
+$('per').onchange=render;render();fill();$('hsy').click();if(S.url)$('us').click();
 </script></body></html>
