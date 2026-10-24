@@ -63,15 +63,16 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 <div class="box"><h2>Hasil hitung COGS bulan terpilih</h2><div class="wrap" style="max-height:360px;overflow:auto"><table id="ts"></table></div></div></section>
 
 <section id="s"><div class="box"><h2>Simpan ke spreadsheet</h2>
- <p class="msg">Data tersimpan di browser dan otomatis dikirim ke Google Sheets jika URL Apps Script diisi (lihat Code.gs).</p>
+ <p class="msg">Data bulanan dan penjualan per SKU disimpan ke Google Sheets (sheet Bulanan dan Penjualan) dan otomatis ditarik setiap dashboard dibuka, di perangkat atau profil Chrome mana pun. Cukup isi URL Apps Script sekali per profil, atau buka dashboard dengan alamat <b>…/?u=URL_APPS_SCRIPT</b>.</p>
  <label>URL Web App Google Apps Script</label><input id="url" placeholder="https://script.google.com/macros/s/.../exec">
- <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" id="us">Simpan URL</button><button class="btn" id="rc">Sambungkan ulang</button><button class="btn" id="sy">Kirim semua bulan (ganti data lama)</button>
- <button class="btn" id="xl">Unduh Excel</button><button class="btn" id="bk">Backup JSON</button><label class="btn" style="margin:0">Restore JSON<input type="file" id="rs" accept=".json" hidden></label></p><p class="msg" id="ms"></p></div></section>
+ <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" id="us">Simpan URL</button><button class="btn" id="rc">Sambungkan ulang</button><button class="btn" id="pl">Tarik data dari spreadsheet</button><button class="btn" id="sy">Kirim semua bulan (ganti data lama)</button>
+ <button class="btn" id="xl">Unduh Excel</button><button class="btn" id="bk">Backup JSON</button><label class="btn" style="margin:0">Restore JSON<input type="file" id="rs" accept=".json" hidden></label></p><p class="msg" id="ms"></p><p class="msg" id="pm"></p></div></section>
 </main>
 <script>
 const K='hypo_v1',$=i=>document.getElementById(i);
 let S=JSON.parse(localStorage.getItem(K)||'{"hpp":{},"m":{},"url":""}'),CH;
 const save=()=>localStorage.setItem(K,JSON.stringify(S));
+{const q=new URLSearchParams(location.search).get('u');if(q){S.url=q;save();history.replaceState(null,'',location.pathname)}}
 const rp=n=>'Rp '+Math.round(n||0).toLocaleString('id-ID');
 const nt=m=>m.rev-m.cogs-m.opx-m.mkt;
 function num(v){if(typeof v==='number')return v;let s=String(v||'').replace(/[^\d,.-]/g,'');if(/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(',','.');return parseFloat(s)||0}
@@ -130,15 +131,25 @@ $('bp').onchange=()=>{$('mp').textContent='';renderSales()};
 // sheets
 function row(k){const m=gm(k);return{bulan:k,revenue:m.rev,cogs:m.cogs,operating:m.opx,marketing:m.mkt,net_profit:nt(m),produk_close:m.prd,resi_close:m.rsi}}
 const fmtT=t=>t?new Date(t).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+function salesOf(ks){const o={};ks.forEach(k=>{const m=S.m[k]||{};o[k]=Object.entries(m.sales||{}).map(([s,q])=>[s,(S.sn&&S.sn[s])||ERPN[s]||'',q,(m.sub&&m.sub[s])||0])});return o}
+async function pull(){if(!S.url){$('pm').textContent='Isi URL Apps Script dulu.';return}$('pm').textContent='Menarik data...';
+ try{const j=await(await fetch(S.url+'?action=data')).json();if(!j.ok||!j.months)throw 0;
+  const sm={};(j.sales||[]).forEach(r=>{(sm[r[0]]=sm[r[0]]||[]).push(r)});const seen={};let n=0;
+  j.months.forEach(r=>{const k=r[0];seen[k]=1;const o=S.m[k];if(o&&!o.sy)return;n++;const m=S.m[k]={rev:+r[1]||0,cogs:+r[2]||0,opx:+r[3]||0,mkt:+r[4]||0,prd:+r[6]||0,rsi:+r[7]||0,unm:[],sy:Date.now()};
+   if(sm[k]){m.sales={};m.sub={};m.erp=0;sm[k].forEach(x=>{m.sales[x[1]]=(m.sales[x[1]]||0)+(+x[3]||0);m.sub[x[1]]=(m.sub[x[1]]||0)+(+x[4]||0);m.erp+=+x[4]||0});if(Object.keys(S.hpp).length)recalc(k)}});
+  Object.keys(S.m).forEach(k=>{if(!seen[k]&&S.m[k].sy){if(j.months.length)delete S.m[k];else S.m[k].sy=0}});
+  save();render();fill();$('pm').textContent='✓ '+n+' bulan ditarik dari spreadsheet ('+new Date().toLocaleTimeString('id-ID')+').';
+  const p=Object.keys(S.m).filter(k=>!S.m[k].sy);if(p.length)push(p)
+ }catch(e){$('pm').textContent='Gagal menarik data. Pastikan Code.gs terbaru sudah di-deploy (New version) dan URL /exec benar.'}}
 async function push(ks,del){if(!S.url){S.ss={st:'off'};renderBd();return}
  S.ss={st:'wait'};renderBd();
- try{const r=await fetch(S.url,{method:'POST',body:JSON.stringify({rows:ks.map(row),del:del||[]})}),j=await r.json();if(!j.ok)throw 0;const t=Date.now();ks.forEach(k=>gm(k).sy=t);S.ss={st:'ok',at:t}}catch(e){S.ss={st:'err'}}
+ try{const r=await fetch(S.url,{method:'POST',body:JSON.stringify({rows:ks.map(row),del:del||[],sales:salesOf(ks)})}),j=await r.json();if(!j.ok)throw 0;const t=Date.now();ks.forEach(k=>gm(k).sy=t);S.ss={st:'ok',at:t,sl:j.sales,old:j.sales===undefined}}catch(e){S.ss={st:'err'}}
  save();render()}
 function renderBd(){const hk=S.he?'<span class="k neg" style="padding:4px 10px">✗ Gagal sinkron HPP, memakai HPP terakhir</span>':S.hppAt&&Object.keys(S.hpp).length?`<span class="k" style="padding:4px 10px">✓ HPP tersinkron ${S.hppAt} (${Object.keys(S.hpp).length} SKU)</span>`:'<span class="k neg" style="padding:4px 10px">✗ HPP belum disinkron</span>';
- const z=S.url&&(!S.ss||S.ss.st==='off')?{st:'idle'}:(S.ss||{st:'off'}),t={ok:'✓ Spreadsheet tersinkron '+fmtT(z.at),wait:'… Mengirim ke spreadsheet',err:'✗ Gagal terhubung ke spreadsheet (data aman di browser). Cek URL /exec, akses Anyone, dan Code.gs terbaru sudah di-deploy',off:'✗ Spreadsheet belum terhubung',idle:'Spreadsheet terhubung, belum ada kiriman'}[z.st];
+ const z=S.url&&(!S.ss||S.ss.st==='off')?{st:'idle'}:(S.ss||{st:'off'}),t={ok:'✓ Spreadsheet tersinkron '+fmtT(z.at)+(z.old?' ⚠ Code.gs masih versi lama, penjualan SKU belum tersimpan':z.sl!==undefined?' ('+z.sl+' baris penjualan di sheet)':''),wait:'… Mengirim ke spreadsheet',err:'✗ Gagal terhubung ke spreadsheet (data aman di browser). Cek URL /exec, akses Anyone, dan Code.gs terbaru sudah di-deploy',off:'✗ Spreadsheet belum terhubung',idle:'Spreadsheet terhubung, belum ada kiriman'}[z.st];
  $('bd').innerHTML=hk+`<span class="k ${z.st==='ok'||z.st==='idle'?'':'neg'}" style="padding:4px 10px">${t}</span>`;$('ms').textContent=t}
 $('url').value=S.url||'';$('us').onclick=async()=>{S.url=$('url').value.trim();save();if(!S.url){S.ss={st:'off'};renderBd();return}try{const j=await(await fetch(S.url+'?action=ping')).json();S.ss=j.ok?{st:'idle'}:{st:'err'}}catch(e){S.ss={st:'err'}}save();renderBd()};
-$('rc').onclick=()=>$('us').click();
+$('rc').onclick=()=>$('us').click();$('pl').onclick=pull;
 $('sy').onclick=()=>push(Object.keys(S.m));
 $('xl').onclick=()=>{const w=XLSX.utils.book_new();XLSX.utils.book_append_sheet(w,XLSX.utils.json_to_sheet(Object.keys(S.m).sort().map(row)),'Bulanan');XLSX.utils.book_append_sheet(w,XLSX.utils.json_to_sheet(Object.entries(S.hpp).map(([sku,hpp])=>({sku,hpp}))),'HPP');XLSX.writeFile(w,'hypospot-keuangan.xlsx')};
 $('bk').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download='hypospot-backup.json';a.click()};
@@ -159,5 +170,5 @@ function render(){
  renderBd();renderSales();renderMap()}
 $('dsl').onclick=()=>{const k=$('bp').value,m=S.m[k];if(!m||!m.sales){$('mp').textContent='Belum ada data penjualan untuk bulan ini.';return}if(!confirm('Hapus data penjualan '+BL[+k.slice(5)-1]+' '+k.slice(0,4)+'? Revenue dan biaya bulan ini tidak ikut terhapus.'))return;delete m.sales;delete m.sub;delete m.erp;m.cogs=0;m.unm=[];m.prd=0;m.sy=0;save();push([k]);$('mp').textContent='✓ Data penjualan bulan ini dihapus.';render();fill()};
 $('dmo').onclick=()=>{const k=$('bln').value,m=S.m[k];if(!m){$('cg').textContent='Belum ada data untuk bulan ini.';return}if(!confirm('Hapus SEMUA data '+BL[+k.slice(5)-1]+' '+k.slice(0,4)+' (revenue, biaya, penjualan) dari dashboard dan spreadsheet?'))return;delete S.m[k];save();push([],[k]);render();fill();$('cg').textContent='✓ Data bulan ini dihapus.'};
-$('per').onchange=render;render();fill();$('hsy').click();if(S.url)$('us').click();
+$('per').onchange=render;render();fill();$('hsy').click();if(S.url){$('us').click();pull()}
 </script></body></html>
