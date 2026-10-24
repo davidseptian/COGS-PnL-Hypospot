@@ -134,9 +134,9 @@ const fmtT=t=>t?new Date(t).toLocaleString('id-ID',{day:'numeric',month:'short',
 function salesOf(ks){const o={};ks.forEach(k=>{const m=S.m[k]||{};o[k]=Object.entries(m.sales||{}).map(([s,q])=>[s,(S.sn&&S.sn[s])||ERPN[s]||'',q,(m.sub&&m.sub[s])||0])});return o}
 async function pull(){if(!S.url){$('pm').textContent='Isi URL Apps Script dulu.';return}$('pm').textContent='Menarik data...';
  try{const j=await(await fetch(S.url+'?action=data')).json();if(!j.ok||!j.months)throw 0;
-  const sm={};(j.sales||[]).forEach(r=>{(sm[r[0]]=sm[r[0]]||[]).push(r)});const seen={};let n=0;
+  try{localStorage.setItem('hypo_bk',JSON.stringify(S.m))}catch(e){}const sm={};(j.sales||[]).forEach(r=>{(sm[r[0]]=sm[r[0]]||[]).push(r)});const seen={};let n=0;
   j.months.forEach(r=>{const k=r[0];seen[k]=1;const o=S.m[k];if(o&&!o.sy)return;n++;const m=S.m[k]={rev:+r[1]||0,cogs:+r[2]||0,opx:+r[3]||0,mkt:+r[4]||0,prd:+r[6]||0,rsi:+r[7]||0,unm:[],sy:Date.now()};
-   if(sm[k]){m.sales={};m.sub={};m.erp=0;sm[k].forEach(x=>{m.sales[x[1]]=(m.sales[x[1]]||0)+(+x[3]||0);m.sub[x[1]]=(m.sub[x[1]]||0)+(+x[4]||0);m.erp+=+x[4]||0});if(Object.keys(S.hpp).length)recalc(k)}});
+   if(sm[k]){m.sales={};m.sub={};m.erp=0;sm[k].forEach(x=>{m.sales[x[1]]=(m.sales[x[1]]||0)+(+x[3]||0);m.sub[x[1]]=(m.sub[x[1]]||0)+(+x[4]||0);m.erp+=+x[4]||0});if(Object.keys(S.hpp).length)recalc(k)}else if(o&&o.sales){m.sales=o.sales;m.sub=o.sub;m.erp=o.erp;m.sy=0;if(Object.keys(S.hpp).length)recalc(k)}});
   Object.keys(S.m).forEach(k=>{if(!seen[k]&&S.m[k].sy){if(j.months.length)delete S.m[k];else S.m[k].sy=0}});
   save();render();fill();$('pm').textContent='✓ '+n+' bulan ditarik dari spreadsheet ('+new Date().toLocaleTimeString('id-ID')+').';
   const p=Object.keys(S.m).filter(k=>!S.m[k].sy);if(p.length)push(p)
